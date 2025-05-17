@@ -28,4 +28,5 @@ Our vision is to revolutionize online transactions by eliminating trust barriers
 
 ## Contract Details 📝
 Contract Address : 0x35dc96A385113926a050D782ab61CA7866328ad6
+
 ![image](https://github.com/user-attachments/assets/22c95bed-31eb-4432-a56f-112a51d8a37d)
