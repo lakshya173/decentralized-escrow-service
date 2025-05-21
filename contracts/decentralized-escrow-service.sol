@@ -15,18 +15,17 @@ contract EscrowService {
     mapping(uint256 => EscrowAgreement) private agreements;
     uint256 public nextEscrowId;
 
-    // Track user involvement
     mapping(address => uint256[]) private userEscrows;
 
     event EscrowCreated(uint256 escrowId, address buyer, address seller, address arbiter, uint256 amount, string description);
     event FundsReleased(uint256 escrowId, address releasedBy);
     event FundsRefunded(uint256 escrowId, address refundedBy);
     event EscrowCancelled(uint256 escrowId, address cancelledBy);
+    event EscrowFunded(uint256 escrowId, uint256 amount); // 🔹 New
 
     function createEscrow(address _seller, address _arbiter, string memory _description) external payable returns (uint256) {
         require(_seller != address(0), "Invalid seller address");
         require(_arbiter != address(0), "Invalid arbiter address");
-        require(msg.value > 0, "Amount must be greater than 0");
 
         uint256 escrowId = nextEscrowId;
 
@@ -40,7 +39,6 @@ contract EscrowService {
             description: _description
         });
 
-        // Track user involvement
         userEscrows[msg.sender].push(escrowId);
         userEscrows[_seller].push(escrowId);
         userEscrows[_arbiter].push(escrowId);
@@ -52,9 +50,19 @@ contract EscrowService {
         return escrowId;
     }
 
+    // 🔹 New: Fund an existing escrow
+    function fundEscrow(uint256 _escrowId) external payable {
+        EscrowAgreement storage agreement = agreements[_escrowId];
+        require(agreement.buyer == msg.sender, "Only buyer can fund");
+        require(!agreement.isReleased && !agreement.isRefunded, "Escrow finalized");
+
+        agreement.amount += msg.value;
+        emit EscrowFunded(_escrowId, msg.value);
+    }
+
     function releaseFunds(uint256 _escrowId) external {
         EscrowAgreement storage agreement = agreements[_escrowId];
-        require(agreement.amount > 0, "Escrow does not exist");
+        require(agreement.amount > 0, "Escrow not funded");
         require(!agreement.isReleased && !agreement.isRefunded, "Funds already finalized");
         require(msg.sender == agreement.buyer || msg.sender == agreement.arbiter, "Not authorized");
 
@@ -67,7 +75,7 @@ contract EscrowService {
 
     function refundBuyer(uint256 _escrowId) external {
         EscrowAgreement storage agreement = agreements[_escrowId];
-        require(agreement.amount > 0, "Escrow does not exist");
+        require(agreement.amount > 0, "Escrow not funded");
         require(!agreement.isReleased && !agreement.isRefunded, "Funds already finalized");
         require(msg.sender == agreement.seller || msg.sender == agreement.arbiter, "Not authorized");
 
@@ -76,6 +84,15 @@ contract EscrowService {
 
         (bool success, ) = agreement.buyer.call{value: agreement.amount}("");
         require(success, "Refund failed");
+    }
+
+    function cancelEscrowBeforeFunding(uint256 _escrowId) external {
+        EscrowAgreement storage agreement = agreements[_escrowId];
+        require(agreement.buyer == msg.sender, "Only buyer can cancel");
+        require(agreement.amount == 0, "Already funded");
+
+        delete agreements[_escrowId];
+        emit EscrowCancelled(_escrowId, msg.sender);
     }
 
     function getEscrowDetails(uint256 _escrowId) external view returns (
@@ -118,12 +135,10 @@ contract EscrowService {
         );
     }
 
-    /// 🔹 New: Returns escrow IDs associated with the caller
     function getMyEscrows() external view returns (uint256[] memory) {
         return userEscrows[msg.sender];
     }
 
-    /// 🔹 New: Get escrow count by role
     function getEscrowsByRole(address _user, string memory role) external view returns (uint256[] memory) {
         uint256[] memory all = userEscrows[_user];
         uint256 count = 0;
@@ -155,9 +170,4 @@ contract EscrowService {
 
         return filtered;
     }
-
-    /// 🔹 New: Allows buyer to cancel escrow before funding (not applicable if already funded)
-    function cancelEscrowBeforeFunding(uint256 _escrowId) external {
-        EscrowAgreement storage agreement = agreements[_escrowId];
-        require(agreement.buyer == msg.sender, "Only buyer can cancel");
-        require(agreement.amount == 0, "Already funded, can't
+}
