@@ -21,7 +21,8 @@ contract EscrowService {
     event FundsReleased(uint256 escrowId, address releasedBy);
     event FundsRefunded(uint256 escrowId, address refundedBy);
     event EscrowCancelled(uint256 escrowId, address cancelledBy);
-    event EscrowFunded(uint256 escrowId, uint256 amount); // 🔹 New
+    event EscrowFunded(uint256 escrowId, uint256 amount);
+    event ArbiterUpdated(uint256 escrowId, address oldArbiter, address newArbiter); // 🔹 New
 
     function createEscrow(address _seller, address _arbiter, string memory _description) external payable returns (uint256) {
         require(_seller != address(0), "Invalid seller address");
@@ -46,11 +47,9 @@ contract EscrowService {
         nextEscrowId++;
 
         emit EscrowCreated(escrowId, msg.sender, _seller, _arbiter, msg.value, _description);
-
         return escrowId;
     }
 
-    // 🔹 New: Fund an existing escrow
     function fundEscrow(uint256 _escrowId) external payable {
         EscrowAgreement storage agreement = agreements[_escrowId];
         require(agreement.buyer == msg.sender, "Only buyer can fund");
@@ -169,5 +168,62 @@ contract EscrowService {
         }
 
         return filtered;
+    }
+
+    // 🔹 New: Check if escrow is still active
+    function isEscrowActive(uint256 _escrowId) public view returns (bool) {
+        EscrowAgreement storage agreement = agreements[_escrowId];
+        return !(agreement.isReleased || agreement.isRefunded);
+    }
+
+    // 🔹 New: Get user’s escrow count
+    function getEscrowCount(address user) external view returns (uint256) {
+        return userEscrows[user].length;
+    }
+
+    // 🔹 New: Get active escrows only
+    function getActiveEscrows(address user) external view returns (uint256[] memory) {
+        uint256[] memory all = userEscrows[user];
+        uint256 count = 0;
+
+        for (uint256 i = 0; i < all.length; i++) {
+            if (isEscrowActive(all[i])) {
+                count++;
+            }
+        }
+
+        uint256[] memory active = new uint256[](count);
+        uint256 index = 0;
+
+        for (uint256 i = 0; i < all.length; i++) {
+            if (isEscrowActive(all[i])) {
+                active[index++] = all[i];
+            }
+        }
+
+        return active;
+    }
+
+    // 🔹 New: Buyer can update arbiter before funds are finalized
+    function updateArbiter(uint256 _escrowId, address newArbiter) external {
+        EscrowAgreement storage agreement = agreements[_escrowId];
+        require(msg.sender == agreement.buyer, "Only buyer can update");
+        require(!agreement.isReleased && !agreement.isRefunded, "Escrow finalized");
+        require(newArbiter != address(0), "Invalid address");
+
+        address oldArbiter = agreement.arbiter;
+        agreement.arbiter = newArbiter;
+
+        userEscrows[newArbiter].push(_escrowId);
+        emit ArbiterUpdated(_escrowId, oldArbiter, newArbiter);
+    }
+
+    // 🔹 New: Admin view - get all escrow IDs
+    function getAllEscrows() external view returns (uint256[] memory) {
+        uint256[] memory all = new uint256[](nextEscrowId);
+        for (uint256 i = 0; i < nextEscrowId; i++) {
+            all[i] = i;
+        }
+        return all;
     }
 }
