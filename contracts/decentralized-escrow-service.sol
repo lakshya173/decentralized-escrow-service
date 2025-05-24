@@ -13,7 +13,7 @@ contract EscrowService {
     }
 
     mapping(uint256 => EscrowAgreement) private agreements;
-    uint256 public nextEscrowId;
+    uint256 public nextEscrowId   
 
     mapping(address => uint256[]) private userEscrows;
 
