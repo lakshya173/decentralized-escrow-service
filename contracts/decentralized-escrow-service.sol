@@ -7,7 +7,7 @@ contract EscrowService {
         address seller;
         address arbiter;
         uint256 amount;
-        bool isReleased;
+        bool isReleased
         bool isRefunded;
         string description;
     }
